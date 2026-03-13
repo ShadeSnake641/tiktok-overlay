@@ -3,6 +3,7 @@
     };
 
     let recordPasses = readStoredNumber(STORAGE_KEYS.record, 0);
+    let currentPasses = 0;
     let goalPasses = 5;
     let goalCelebrated = false;
 
