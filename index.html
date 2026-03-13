@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hacky Sack Counter Overlay</title>
+  <style>
+    :root {
+      --text-main: #ffffff;
+      --text-soft: #d8edff;
+      --accent-a: #20f5ff;
+      --accent-b: #66ff9f;
+      --danger: #ff6670;
+      --gold: #ffd15a;
+      --overlay-scale: 1.12;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 1920px;
+      height: 1080px;
+      background: transparent;
+      overflow: hidden;
+      font-family: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+    }
+
+    .overlay {
+      position: fixed;
+      top: 30px;
+      left: 30px;
+      zoom: var(--overlay-scale);
+      min-width: 420px;
+      padding: 18px 20px;
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      border-radius: 18px;
+      color: var(--text-main);
+      font-size: 42px;
+      font-weight: bold;
+      line-height: 1.4;
+      overflow: visible;
+      isolation: isolate;
+      backdrop-filter: blur(2px);
+      background:
+        linear-gradient(130deg, rgba(0, 0, 0, 0.34), rgba(0, 0, 0, 0.12));
+      text-shadow:
+        2px 2px 0 #000,
+        -2px 2px 0 #000,
+        2px -2px 0 #000,
+        -2px -2px 0 #000,
+        0 0 12px rgba(0,0,0,0.8);
+      will-change: box-shadow, transform;
+    }
+
+    .overlay::before {
+      content: "";
+      position: absolute;
+      inset: -36px;
+      z-index: -2;
+      border-radius: 32px;
+      background:
+        radial-gradient(circle at 20% 35%, rgba(32, 245, 255, 0.24), transparent 52%),
+        radial-gradient(circle at 75% 70%, rgba(102, 255, 159, 0.22), transparent 54%),
+        radial-gradient(circle at 50% 20%, rgba(255, 209, 90, 0.16), transparent 48%);
+      filter: blur(8px);
+      opacity: 0.95;
+      animation: auraDrift 11s ease-in-out infinite alternate;
+    }
+
+    .overlay::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border-radius: inherit;
+      background:
+        linear-gradient(120deg, rgba(32, 245, 255, 0.13), rgba(255, 209, 90, 0.08), rgba(102, 255, 159, 0.1));
+      background-size: 180% 180%;
+      opacity: 0.96;
+      pointer-events: none;
+      animation: sheenShift 7s ease-in-out infinite alternate;
+    }
+
+    .label {
+      margin-bottom: 6px;
+      position: relative;
+      transform-origin: left center;
+    }
+
+    .wave-char,
+    .wave-token {
+      display: inline-block;
+      transform: translateY(0);
+      will-change: transform;
+    }
+
+    .overlay.idle-text-wave .wave-char,
+    .overlay.idle-text-wave .wave-token {
+      animation: idleTextWave var(--wave-cycle, 9000ms) cubic-bezier(0.35, 0, 0.25, 1) infinite;
+      animation-delay: var(--wave-delay, 0ms);
+    }
+
+    .headline {
+      display: inline-block;
+      font-size: 19px;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+      color: var(--text-soft);
+      transform-origin: 50% 50%;
+      white-space: nowrap;
+      text-shadow:
+        1px 1px 0 #000,
+        0 0 10px rgba(32, 245, 255, 0.5);
+    }
+
+    .headline.idle-flip {
+      animation: idleFlipHold 1500ms cubic-bezier(0.42, 0, 0.2, 1) infinite;
+    }
+
+    .headline-hit {
+      animation: headlineRubber 360ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .counter {
+      font-size: 52px;
+      color: #f8ffff;
+      filter: drop-shadow(0 0 10px rgba(112, 255, 255, 0.35));
+    }
+
+    .editable-number {
+      display: inline-block;
+      min-width: 2ch;
+      padding: 0 4px;
+      border-radius: 6px;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.45);
+      cursor: text;
+      transition: background 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    }
+
+    .editable-number:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-bottom-color: rgba(255, 255, 255, 0.85);
+    }
+
+    .editable-number.editing {
+      background: rgba(255, 255, 255, 0.2);
+      border-bottom-color: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+      animation: none !important;
+      transform: translateY(0) !important;
+      outline: none;
+    }
+
+    .goal-progress {
+      position: relative;
+      width: 100%;
+      height: 16px;
+      margin-top: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      background:
+        linear-gradient(180deg, rgba(150, 210, 255, 0.24), rgba(40, 78, 124, 0.48));
+      box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.2),
+        inset 0 -1px 2px rgba(0, 0, 0, 0.35);
+    }
+
+    .goal-progress-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0%;
+      border-radius: inherit;
+      overflow: hidden;
+      background: linear-gradient(180deg, #5cbfff, #2c86d9);
+      box-shadow: 0 0 10px rgba(92, 191, 255, 0.4);
+      transition:
+        width 460ms cubic-bezier(0.22, 1, 0.36, 1),
+        background 420ms ease,
+        box-shadow 420ms ease,
+        filter 420ms ease;
+      will-change: width, background, box-shadow, filter;
+    }
+
+    .goal-progress-fill::before {
+      content: "";
+      position: absolute;
+      inset: -30% -42%;
+      background: linear-gradient(
+        112deg,
+        rgba(255, 248, 214, 0) 32%,
+        rgba(255, 244, 186, 0.72) 47%,
+        rgba(255, 255, 231, 0.92) 50%,
+        rgba(255, 240, 178, 0.62) 53%,
+        rgba(255, 248, 214, 0) 68%
+      );
+      opacity: 0;
+      transform: translateX(-145%);
+      filter: blur(2.2px);
+      pointer-events: none;
+    }
+
+    .goal-progress-fill::after {
+      content: "";
+      position: absolute;
+      inset: 50% 0 0 0;
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.3));
+      pointer-events: none;
+    }
+
+    .goal-progress-fill.goal-complete {
+      background: linear-gradient(180deg, #ffe5a0, #f7bf4f);
+      box-shadow:
+        0 0 10px rgba(255, 209, 90, 0.52),
+        0 0 16px rgba(255, 184, 74, 0.3);
+    }
+
+    .goal-progress-fill.goal-shimmer::before {
+      opacity: 1;
+      animation: goalBarShimmer 1100ms linear infinite;
+      animation-delay: -280ms;
+    }
+
+    .goal-progress-fill.record-glow {
+      background: linear-gradient(180deg, #ffe9a6, #ffd15a);
+      box-shadow:
+        0 0 10px rgba(255, 226, 140, 0.8),
+        0 0 18px rgba(255, 209, 90, 0.55);
+      filter: saturate(1.08);
+    }
+
+    .event-layer {
+      position: absolute;
+      inset: -26px;
+      pointer-events: none;
+      overflow: visible;
+      z-index: 5;
+    }
+
+    .sparkle-layer {
+      position: absolute;
+      inset: -30px;
+      pointer-events: none;
+      overflow: visible;
+      z-index: 6;
+    }
+
+    .popup {
+      position: absolute;
+      left: 52%;
+      top: 46%;
+      font-size: 30px;
+      font-weight: 900;
+      white-space: nowrap;
+      animation: popRise 700ms cubic-bezier(0.16, 0.82, 0.31, 1) forwards;
+    }
+
+    .popup.plus {
+      color: #89ffba;
+      text-shadow: 0 0 10px rgba(121, 255, 174, 0.85);
+    }
+
+    .popup.minus {
+      color: #ff8f97;
+      text-shadow: 0 0 10px rgba(255, 102, 112, 0.8);
+    }
+
+    .popup.record {
+      color: #ffd15a;
+      text-shadow: 0 0 14px rgba(255, 209, 90, 0.95);
+    }
+
+    .popup.goal {
+      color: #82ffbf;
+      text-shadow: 0 0 15px rgba(102, 255, 159, 0.95);
+      letter-spacing: 0.04em;
+    }
+
+    .sparkle {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--sparkle-color, #ffffff);
+      box-shadow: 0 0 10px var(--sparkle-color, #ffffff);
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.2);
+      animation: sparkleBurst 900ms ease-out forwards;
+    }
+
+    .flash-good {
+      animation: pulseGood 420ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .flash-bad {
+      animation: pulseBad 360ms ease;
+    }
+
+    .shake {
+      animation: softShake 220ms ease;
+    }
+
+    .record-burst {
+      animation: goldBloom 900ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .record-value-burst {
+      animation: recordValuePulse 780ms cubic-bezier(0.16, 0.84, 0.25, 1);
+    }
+
+    .goal-value-burst {
+      animation: goalValuePulse 860ms cubic-bezier(0.16, 0.84, 0.25, 1);
+    }
+
+    .goal-burst {
+      animation: goalBloom 1200ms cubic-bezier(0.12, 0.96, 0.3, 1);
+    }
+
+    @keyframes auraDrift {
+      0% { background-position: 15% 30%, 74% 68%, 48% 18%; }
+      50% { background-position: 24% 22%, 68% 74%, 56% 28%; }
+      100% { background-position: 18% 34%, 80% 66%, 44% 24%; }
+    }
+
+    @keyframes sheenShift {
+      0% { background-position: 20% 20%; }
+      100% { background-position: 85% 80%; }
+    }
+
+    @keyframes pulseGood {
+      0% { transform: translateY(0) scale(1); color: #f8ffff; }
+      38% { transform: translateY(-4px) scale(1.1); color: #b3ffd6; }
+      100% { transform: translateY(0) scale(1); color: #f8ffff; }
+    }
+
+    @keyframes pulseBad {
+      0% { transform: scale(1); }
+      45% { transform: scale(0.96); color: #ff94a0; }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes softShake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-3px); }
+      75% { transform: translateX(3px); }
+    }
+
+    @keyframes goldBloom {
+      0% { box-shadow: 0 0 0 rgba(255, 209, 90, 0); }
+      40% { box-shadow: 0 0 52px rgba(255, 209, 90, 0.82); }
+      100% { box-shadow: 0 0 0 rgba(255, 209, 90, 0); }
+    }
+
+    @keyframes recordValuePulse {
+      0% {
+        color: var(--text-main);
+        text-shadow:
+          2px 2px 0 rgba(0, 0, 0, 0),
+          -2px 2px 0 rgba(0, 0, 0, 0),
+          2px -2px 0 rgba(0, 0, 0, 0),
+          -2px -2px 0 rgba(0, 0, 0, 0),
+          0 0 0 rgba(255, 209, 90, 0);
+      }
+      35% {
+        color: #ffe49a;
+        text-shadow:
+          2px 2px 0 rgba(0, 0, 0, 0.12),
+          -2px 2px 0 rgba(0, 0, 0, 0.12),
+          2px -2px 0 rgba(0, 0, 0, 0.12),
+          -2px -2px 0 rgba(0, 0, 0, 0.12),
+          0 0 16px rgba(255, 209, 90, 0.95);
+      }
+      75% {
+        color: #fff4c4;
+        text-shadow:
+          2px 2px 0 rgba(0, 0, 0, 0.6),
+          -2px 2px 0 rgba(0, 0, 0, 0.6),
+          2px -2px 0 rgba(0, 0, 0, 0.6),
+          -2px -2px 0 rgba(0, 0, 0, 0.6),
+          0 0 8px rgba(255, 209, 90, 0.45);
+      }
+      100% {
+        color: var(--text-main);
+        text-shadow:
+          2px 2px 0 rgba(0, 0, 0, 1),
+          -2px 2px 0 rgba(0, 0, 0, 1),
+          2px -2px 0 rgba(0, 0, 0, 1),
+          -2px -2px 0 rgba(0, 0, 0, 1),
+          0 0 12px rgba(0, 0, 0, 0.8);
+      }
+    }
+
+    @keyframes goalValuePulse {
+      0% {
+        color: var(--text-main);
+        text-shadow:
+          2px 2px 0 rgba(0, 0, 0, 0),
+          -2px 2px 0 rgba(0, 0, 0, 0),
+          2px -2px 0 rgba(0, 0, 0, 0),
+          -2px -2px 0 rgba(0, 0, 0, 0),
+          0 0 0 rgba(102, 255, 159, 0);
+      }
+      36% {
+        color: #b8ffd6;
+        text-shadow:
+          2px 2px 0 rgba(0, 0, 0, 0.14),
+          -2px 2px 0 rgba(0, 0, 0, 0.14),
+          2px -2px 0 rgba(0, 0, 0, 0.14),
+          -2px -2px 0 rgba(0, 0, 0, 0.14),
+          0 0 16px rgba(102, 255, 159, 0.95);
+      }
+      76% {
+        color: #e0ffee;
+        text-shadow:
+          2px 2px 0 rgba(0, 0, 0, 0.62),
+          -2px 2px 0 rgba(0, 0, 0, 0.62),
+          2px -2px 0 rgba(0, 0, 0, 0.62),
+          -2px -2px 0 rgba(0, 0, 0, 0.62),
+          0 0 8px rgba(102, 255, 159, 0.42);
+      }
+      100% {
+        color: var(--text-main);
+        text-shadow:
+          2px 2px 0 rgba(0, 0, 0, 1),
+          -2px 2px 0 rgba(0, 0, 0, 1),
+          2px -2px 0 rgba(0, 0, 0, 1),
+          -2px -2px 0 rgba(0, 0, 0, 1),
+          0 0 12px rgba(0, 0, 0, 0.8);
+      }
+    }
+
+    @keyframes goalBloom {
+      0% { box-shadow: 0 0 0 rgba(102, 255, 159, 0); }
+      35% { box-shadow: 0 0 58px rgba(102, 255, 159, 0.92); }
+      100% { box-shadow: 0 0 0 rgba(102, 255, 159, 0); }
+    }
+
+    @keyframes popRise {
+      0% { opacity: 0; transform: translate(-50%, 12px) scale(0.7); }
+      18% { opacity: 1; transform: translate(-50%, 0) scale(1.1); }
+      100% { opacity: 0; transform: translate(-50%, -70px) scale(0.96); }
+    }
+
+    @keyframes sparkleBurst {
+      0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.2);
+      }
+      20% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0;
+        transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0);
+      }
+    }
+
+    @keyframes idleFlipHold {
+      0% { transform: translateY(0) scaleX(1); }
+      16.6667% { transform: translateY(0) scaleX(1); }
+      50% { transform: translateY(0) scaleX(-1); }
+      66.6667% { transform: translateY(0) scaleX(-1); }
+      100% { transform: translateY(0) scaleX(1); }
+    }
+
+    @keyframes headlineRubber {
+      0% { transform: translateY(0) scaleX(1) scaleY(1); }
+      28% { transform: translateY(-3px) scaleX(0.9) scaleY(1.15); }
+      56% { transform: translateY(0) scaleX(1.04) scaleY(0.96); }
+      100% { transform: translateY(0) scaleX(1) scaleY(1); }
+    }
+
+    @keyframes goalBarShimmer {
+      0% { transform: translateX(-145%); }
+      100% { transform: translateX(145%); }
+    }
+
+    @keyframes idleTextWave {
+      0% { transform: translateY(0); }
+      7% { transform: translateY(-4px); }
+      14% { transform: translateY(0); }
+      100% { transform: translateY(0); }
+    }
+
+    #confettiCanvas {
+      position: fixed;
+      inset: 0;
+      width: 1920px;
+      height: 1080px;
+      pointer-events: none;
+      z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay" id="overlay">
+    <div class="headline" id="headline"></div>
+    <div class="label counter" id="currentText">
+      <span id="currentLabelWave">Current Passes:</span> <span id="currentValue">0</span>
+    </div>
+    <div class="label" id="recordText">
+      <span id="recordLabelWave">Record Passes:</span>
+      <span class="editable-number" id="recordValue" contenteditable="true" spellcheck="false" aria-label="Record passes">0</span>
+    </div>
+    <div class="label" id="goalText">
+      <span id="goalLabelWave">Goal:</span>
+      <span class="editable-number" id="goalValue" contenteditable="true" spellcheck="false" aria-label="Goal passes">5</span>
+      <span id="goalSuffixWave">Passes (</span><span id="goalPercent">0</span><span id="goalPercentSuffixWave">%)</span>
+    </div>
+    <div class="goal-progress" id="goalProgressTrack" aria-hidden="true">
+      <div class="goal-progress-fill" id="goalProgressFill"></div>
+    </div>
+    <div class="event-layer" id="eventLayer"></div>
+    <div class="sparkle-layer" id="sparkleLayer"></div>
+  </div>
+  <canvas id="confettiCanvas"></canvas>
+
+  <script>
+    let currentPasses = 0;
+    const STORAGE_KEYS = {
+      record: "hackySackCounter.recordPasses"
+    };
+
+    let recordPasses = readStoredNumber(STORAGE_KEYS.record, 0);
+    let goalPasses = 5;
+    let goalCelebrated = false;
+
+    const overlay = document.getElementById("overlay");
+    const headline = document.getElementById("headline");
+    const currentText = document.getElementById("currentText");
+    const currentValue = document.getElementById("currentValue");
+    const recordValue = document.getElementById("recordValue");
+    const goalValue = document.getElementById("goalValue");
+    const goalPercent = document.getElementById("goalPercent");
+    const goalProgressFill = document.getElementById("goalProgressFill");
+    const currentLabelWave = document.getElementById("currentLabelWave");
+    const recordLabelWave = document.getElementById("recordLabelWave");
+    const goalLabelWave = document.getElementById("goalLabelWave");
+    const goalSuffixWave = document.getElementById("goalSuffixWave");
+    const goalPercentSuffixWave = document.getElementById("goalPercentSuffixWave");
+    const eventLayer = document.getElementById("eventLayer");
+    const sparkleLayer = document.getElementById("sparkleLayer");
+    const confettiCanvas = document.getElementById("confettiCanvas");
+    const confettiCtx = confettiCanvas.getContext("2d");
+    const currentTextAnimations = ["flash-good", "flash-bad"];
+    const overlayAnimations = ["shake", "record-burst", "goal-burst"];
+    const recordAnimations = ["record-value-burst"];
+    const goalValueAnimations = ["goal-value-burst"];
+    const headlineAnimations = ["headline-hit"];
+    const animationDurations = {
+      "flash-good": 420,
+      "flash-bad": 360,
+      "shake": 220,
+      "record-burst": 900,
+      "record-value-burst": 780,
+      "goal-value-burst": 860,
+      "goal-burst": 1200,
+      "headline-hit": 360
+    };
+    const MAX_PLUS_HISTORY = 500;
+    const animationTimers = new Map();
+    let newRecordAnnouncedThisRun = false;
+    const plusActionHistory = [];
+    const goalFxTimers = new Set();
+    const confettiPieces = [];
+    let confettiFrame = null;
+    let confettiLastTs = 0;
+    let confettiWidth = 0;
+    let confettiHeight = 0;
+    const IDLE_FLIP_HEADLINE = "\u266A\u250F(\u30FBo\uff65)\u251B\u266A";
+    let goalReachedHeadlineActive = false;
+    let goalBarHoldFull = false;
+    let resetEmoteActive = false;
+    let resetEmoteText = "";
+    const resetTransitionTimers = new Set();
+    let idleWaveConfigured = false;
+    const resetHeadlines = [
+      "\u02d9\u25e0\u02d9",
+      "(\u2022\u0301 \u1d16 \u2022\u0300)",
+      "\u0ac8(\u25de \u2038 \u25df )\u10d0",
+      "(\u2565\u2038\u2565)",
+      "._.",
+      ".\u00b7\u00b0\u055e(\u02c3 \u15dd \u02c2)\u055e\u00b0\u00b7.",
+      "\u0ac8\u25de\u2038\u25df\u02f6\u{1106c}",
+      "\u{1050c}\u055e.\u2038.\u055e\u{109af}"
+    ];
+    const confettiPalette = [
+      "#ffd166",
+      "#ef476f",
+      "#06d6a0",
+      "#118ab2",
+      "#f4f1de",
+      "#ff8fab",
+      "#83f28f"
+    ];
+
+    function render() {
+      if (!idleWaveConfigured) {
+        configureIdleTextWave();
+      }
+      currentValue.textContent = String(currentPasses);
+      recordValue.textContent = String(recordPasses);
+      goalValue.textContent = String(goalPasses);
+      const rawPercent = goalPasses > 0 ? (currentPasses / goalPasses) * 100 : 0;
+      const percent = Math.min(100, Math.max(0, Math.round(rawPercent)));
+      goalPercent.textContent = String(percent);
+      updateGoalProgressBar(rawPercent);
+      if (!resetEmoteActive) {
+        headline.textContent = getMoodText();
+      }
+      syncHeadlineState();
+    }
+
+    function buildWaveCharacters(node, startDelay, charStepMs) {
+      const source = node.textContent || "";
+      node.textContent = "";
+      let delay = startDelay;
+
+      for (const ch of source) {
+        const span = document.createElement("span");
+        span.className = "wave-char";
+        span.style.setProperty("--wave-delay", `${delay}ms`);
+        span.textContent = ch === " " ? "\u00a0" : ch;
+        node.appendChild(span);
+        delay += charStepMs;
+      }
+
+      return delay;
+    }
+
+    function setWaveDelay(node, delayMs) {
+      node.classList.add("wave-token");
+      node.style.setProperty("--wave-delay", `${delayMs}ms`);
+    }
+
+    function configureIdleTextWave() {
+      const charStepMs = 85;
+      const lineGapMs = 290;
+      const tokenStepMs = 140;
+      let delay = 0;
+
+      delay = buildWaveCharacters(currentLabelWave, delay, charStepMs);
+      setWaveDelay(currentValue, delay);
+      delay += tokenStepMs + lineGapMs;
+
+      delay = buildWaveCharacters(recordLabelWave, delay, charStepMs);
+      setWaveDelay(recordValue, delay);
+      delay += tokenStepMs + lineGapMs;
+
+      delay = buildWaveCharacters(goalLabelWave, delay, charStepMs);
+      setWaveDelay(goalValue, delay);
+      delay += tokenStepMs;
+      delay = buildWaveCharacters(goalSuffixWave, delay, charStepMs);
+      setWaveDelay(goalPercent, delay);
+      delay += tokenStepMs;
+      delay = buildWaveCharacters(goalPercentSuffixWave, delay, charStepMs);
+
+      overlay.style.setProperty("--wave-cycle", `${delay + 2600}ms`);
+      overlay.classList.add("idle-text-wave");
+      idleWaveConfigured = true;
+    }
+
+    function getMoodText() {
+      if (resetEmoteActive) return resetEmoteText;
+      if (goalReachedHeadlineActive) return "Goal Reached";
+      if (currentPasses === 0) return "";
+      if (currentPasses === goalPasses - 1) return "So Close";
+      if (currentPasses >= Math.floor(goalPasses * 0.75)) return "On Fire";
+      if (currentPasses >= Math.floor(goalPasses * 0.5)) return "Cooking";
+      if (currentPasses >= Math.floor(goalPasses * 0.25)) return "Locked In";
+      return "Warming Up";
+    }
+
+    function syncHeadlineState() {
+      const useIdle = !resetEmoteActive && !goalReachedHeadlineActive && currentPasses === 0;
+      headline.classList.toggle("idle-flip", useIdle);
+      if (useIdle) headline.textContent = IDLE_FLIP_HEADLINE;
+    }
+
+    function clearPlusHistory() {
+      plusActionHistory.length = 0;
+    }
+
+    function mixHue(start, end, ratio) {
+      return start + (end - start) * ratio;
+    }
+
+    function updateGoalProgressBar(rawPercent) {
+      const clamped = Math.min(100, Math.max(0, rawPercent));
+      const displayPercent = goalBarHoldFull ? 100 : clamped;
+      const ratio = displayPercent / 100;
+      const hue = mixHue(208, 46, ratio);
+      const topLight = 58 + ratio * 7;
+      const bottomLight = 47 + ratio * 9;
+      const atRecordOrHigher = recordPasses > 0 && currentPasses >= recordPasses;
+
+      goalProgressFill.style.width = `${displayPercent}%`;
+      goalProgressFill.classList.toggle("goal-complete", goalBarHoldFull);
+      goalProgressFill.classList.toggle("goal-shimmer", goalBarHoldFull);
+
+      if (goalBarHoldFull) {
+        goalProgressFill.classList.toggle("record-glow", atRecordOrHigher);
+        goalProgressFill.style.background = "";
+        goalProgressFill.style.boxShadow = "";
+        goalProgressFill.style.filter = "";
+        return;
+      }
+
+      if (atRecordOrHigher) {
+        goalProgressFill.classList.add("record-glow");
+        goalProgressFill.style.background = "";
+        goalProgressFill.style.boxShadow = "";
+        goalProgressFill.style.filter = "";
+      } else {
+        goalProgressFill.classList.remove("record-glow");
+        goalProgressFill.classList.remove("goal-complete", "goal-shimmer");
+        goalProgressFill.style.background =
+          `linear-gradient(180deg, hsl(${hue.toFixed(1)} 97% ${topLight.toFixed(1)}%), hsl(${hue.toFixed(1)} 89% ${bottomLight.toFixed(1)}%))`;
+        goalProgressFill.style.boxShadow = `0 0 ${Math.round(9 + ratio * 7)}px hsla(${hue.toFixed(1)} 95% 65% / ${0.36 + ratio * 0.26})`;
+        goalProgressFill.style.filter = "none";
+      }
+    }
+
+    function capturePlusSnapshot() {
+      return {
+        currentPasses,
+        recordPasses,
+        goalPasses,
+        goalCelebrated,
+        newRecordAnnouncedThisRun,
+        goalReachedHeadlineActive,
+        goalBarHoldFull
+      };
+    }
+
+    function pushPlusSnapshot() {
+      plusActionHistory.push(capturePlusSnapshot());
+      if (plusActionHistory.length > MAX_PLUS_HISTORY) {
+        plusActionHistory.shift();
+      }
+    }
+
+    function scheduleGoalFx(callback, delay) {
+      const timer = setTimeout(() => {
+        goalFxTimers.delete(timer);
+        callback();
+      }, delay);
+      goalFxTimers.add(timer);
+      return timer;
+    }
+
+    function clearGoalFxTimers() {
+      goalFxTimers.forEach((timer) => clearTimeout(timer));
+      goalFxTimers.clear();
+    }
+
+    function clearResetTransition() {
+      resetTransitionTimers.forEach((timer) => clearTimeout(timer));
+      resetTransitionTimers.clear();
+      resetEmoteActive = false;
+      resetEmoteText = "";
+      headline.style.transition = "";
+      headline.style.opacity = "1";
+      syncHeadlineState();
+    }
+
+    function runResetHeadlineTransition() {
+      clearResetTransition();
+      resetEmoteText = randomFrom(resetHeadlines);
+      resetEmoteActive = true;
+
+      headline.style.transition = "opacity 280ms ease";
+      headline.style.opacity = "1";
+      headline.textContent = resetEmoteText;
+      syncHeadlineState();
+
+      const fadeOutTimer = setTimeout(() => {
+        headline.style.opacity = "0";
+      }, 1000);
+      resetTransitionTimers.add(fadeOutTimer);
+
+      const swapTimer = setTimeout(() => {
+        resetEmoteActive = false;
+        headline.textContent = getMoodText();
+        headline.style.opacity = "1";
+        syncHeadlineState();
+        resetTransitionTimers.delete(swapTimer);
+      }, 1280);
+      resetTransitionTimers.add(swapTimer);
+    }
+
+    function clearConfetti() {
+      if (confettiFrame !== null) {
+        window.cancelAnimationFrame(confettiFrame);
+        confettiFrame = null;
+      }
+      confettiPieces.length = 0;
+      if (confettiCtx) {
+        confettiCtx.clearRect(0, 0, confettiWidth, confettiHeight);
+      }
+    }
+
+    function clearVisualEffects() {
+      clearGoalFxTimers();
+      clearConfetti();
+      clearResetTransition();
+      eventLayer.replaceChildren();
+      sparkleLayer.replaceChildren();
+    }
+
+    function restorePlusSnapshot(snapshot) {
+      clearVisualEffects();
+
+      currentPasses = snapshot.currentPasses;
+      recordPasses = snapshot.recordPasses;
+      goalPasses = snapshot.goalPasses;
+      goalCelebrated = snapshot.goalCelebrated;
+      newRecordAnnouncedThisRun = snapshot.newRecordAnnouncedThisRun;
+      goalReachedHeadlineActive = snapshot.goalReachedHeadlineActive;
+      goalBarHoldFull = snapshot.goalBarHoldFull;
+
+      saveStoredNumber(STORAGE_KEYS.record, recordPasses);
+      render();
+    }
+
+    function undoLastPlusAction() {
+      if (!plusActionHistory.length) {
+        animateClass(overlay, "shake", overlayAnimations);
+        spawnPopup("No Undo", "minus");
+        return;
+      }
+
+      const snapshot = plusActionHistory.pop();
+      restorePlusSnapshot(snapshot);
+      animateClass(currentText, "flash-bad", currentTextAnimations);
+      spawnPopup("Undo", "minus");
+    }
+
+    function readStoredNumber(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw === null) return fallback;
+        const parsed = Number.parseInt(raw, 10);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+      } catch (error) {
+        return fallback;
+      }
+    }
+
+    function saveStoredNumber(key, value) {
+      try {
+        localStorage.setItem(key, String(value));
+      } catch (error) {
+        // Ignore storage failures in overlay contexts where storage is blocked.
+      }
+    }
+
+    function sanitizeInputToNumber(value, fallback, min = 0) {
+      const cleaned = String(value).replace(/[^\d]/g, "");
+      if (!cleaned) return fallback;
+      return Math.max(min, Number.parseInt(cleaned, 10));
+    }
+
+    function getAnimationKey(el, className) {
+      if (!el.dataset.animKey) {
+        el.dataset.animKey = `anim-${Math.random().toString(36).slice(2, 9)}`;
+      }
+      return `${el.dataset.animKey}:${className}`;
+    }
+
+    function animateClass(el, className, classGroup = []) {
+      classGroup.forEach((name) => el.classList.remove(name));
+      el.classList.remove(className);
+      void el.offsetWidth;
+      el.classList.add(className);
+      const timerKey = getAnimationKey(el, className);
+      const existingTimer = animationTimers.get(timerKey);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
+      const duration = animationDurations[className] || 800;
+      const timer = setTimeout(() => {
+        el.classList.remove(className);
+        animationTimers.delete(timerKey);
+      }, duration + 40);
+      animationTimers.set(timerKey, timer);
+    }
+
+    function spawnPopup(text, type = "plus") {
+      const node = document.createElement("div");
+      node.className = `popup ${type}`;
+      node.textContent = text;
+      const jitter = (Math.random() - 0.5) * 40;
+      node.style.left = `${52 + jitter / 10}%`;
+      eventLayer.appendChild(node);
+      node.addEventListener("animationend", () => node.remove());
+    }
+
+    function spawnSparkles({ count = 14, color = "#ffd15a", rangeX = 170, rangeY = 95 } = {}) {
+      for (let i = 0; i < count; i += 1) {
+        const node = document.createElement("span");
+        const angle = Math.random() * Math.PI * 2;
+        const distanceX = 28 + Math.random() * rangeX;
+        const distanceY = 16 + Math.random() * rangeY;
+        const tx = Math.cos(angle) * distanceX;
+        const ty = Math.sin(angle) * distanceY;
+        const size = 4 + Math.random() * 7;
+
+        node.className = "sparkle";
+        node.style.setProperty("--tx", `${tx.toFixed(1)}px`);
+        node.style.setProperty("--ty", `${ty.toFixed(1)}px`);
+        node.style.setProperty("--sparkle-color", color);
+        node.style.width = `${size}px`;
+        node.style.height = `${size}px`;
+        node.style.left = `${42 + Math.random() * 20}%`;
+        node.style.top = `${34 + Math.random() * 30}%`;
+        node.style.animationDuration = `${780 + Math.random() * 420}ms`;
+
+        sparkleLayer.appendChild(node);
+        node.addEventListener("animationend", () => node.remove());
+      }
+    }
+
+    const SCENE_WIDTH = 1920;
+    const SCENE_HEIGHT = 1080;
+
+    function resizeConfettiCanvas() {
+      if (!confettiCtx) return;
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      confettiWidth = SCENE_WIDTH;
+      confettiHeight = SCENE_HEIGHT;
+      confettiCanvas.width = Math.floor(confettiWidth * dpr);
+      confettiCanvas.height = Math.floor(confettiHeight * dpr);
+      confettiCanvas.style.width = `${confettiWidth}px`;
+      confettiCanvas.style.height = `${confettiHeight}px`;
+      confettiCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function randomFrom(list) {
+      return list[Math.floor(Math.random() * list.length)];
+    }
+
+    function createConfettiPiece(yMin, yMax) {
+      const color = randomFrom(confettiPalette);
+      return {
+        x: Math.random() * confettiWidth,
+        y: yMin + Math.random() * (yMax - yMin),
+        vx: (Math.random() - 0.5) * 95,
+        vy: 90 + Math.random() * 220,
+        gravity: 260 + Math.random() * 260,
+        swayAmp: 8 + Math.random() * 16,
+        swayFreq: 1.4 + Math.random() * 2.4,
+        swayPhase: Math.random() * Math.PI * 2,
+        rotation: Math.random() * Math.PI * 2,
+        rotationSpeed: (Math.random() - 0.5) * 8.5,
+        flipSpeed: 6 + Math.random() * 8,
+        flipPhase: Math.random() * Math.PI * 2,
+        width: 6 + Math.random() * 8,
+        height: 10 + Math.random() * 12,
+        drag: 0.008 + Math.random() * 0.012,
+        color
+      };
+    }
+
+    function addConfettiWave(count, yMin, yMax) {
+      for (let i = 0; i < count; i += 1) {
+        confettiPieces.push(createConfettiPiece(yMin, yMax));
+      }
+    }
+
+    function drawConfettiPiece(piece) {
+      if (!confettiCtx) return;
+      const wobbleX = Math.sin(piece.swayPhase) * piece.swayAmp;
+      const flipScale = 0.25 + Math.abs(Math.cos(piece.flipPhase));
+
+      confettiCtx.save();
+      confettiCtx.translate(piece.x + wobbleX, piece.y);
+      confettiCtx.rotate(piece.rotation);
+      confettiCtx.scale(1, flipScale);
+      confettiCtx.fillStyle = piece.color;
+      confettiCtx.fillRect(-piece.width / 2, -piece.height / 2, piece.width, piece.height);
+      confettiCtx.globalAlpha = 0.28;
+      confettiCtx.fillStyle = "#000000";
+      confettiCtx.fillRect(-piece.width / 2, -piece.height / 2, piece.width * 0.45, piece.height);
+      confettiCtx.restore();
+      confettiCtx.globalAlpha = 1;
+    }
+
+    function stepConfetti(timestamp) {
+      if (!confettiCtx) {
+        confettiPieces.length = 0;
+        confettiFrame = null;
+        return;
+      }
+
+      if (!confettiPieces.length) {
+        confettiCtx.clearRect(0, 0, confettiWidth, confettiHeight);
+        confettiFrame = null;
+        return;
+      }
+
+      const dt = Math.min(0.034, (timestamp - confettiLastTs) / 1000);
+      confettiLastTs = timestamp;
+
+      confettiCtx.clearRect(0, 0, confettiWidth, confettiHeight);
+
+      for (let i = confettiPieces.length - 1; i >= 0; i -= 1) {
+        const piece = confettiPieces[i];
+        piece.vx *= Math.max(0.88, 1 - piece.drag * 60 * dt);
+        piece.vy += piece.gravity * dt;
+        piece.x += piece.vx * dt;
+        piece.y += piece.vy * dt;
+        piece.rotation += piece.rotationSpeed * dt;
+        piece.swayPhase += piece.swayFreq * dt;
+        piece.flipPhase += piece.flipSpeed * dt;
+
+        drawConfettiPiece(piece);
+
+        if (piece.y - piece.height > confettiHeight + 40) {
+          confettiPieces.splice(i, 1);
+        }
+      }
+
+      confettiFrame = window.requestAnimationFrame(stepConfetti);
+    }
+
+    function startConfettiLoop() {
+      if (!confettiCtx) return;
+      if (confettiFrame !== null) return;
+      confettiLastTs = performance.now();
+      confettiFrame = window.requestAnimationFrame(stepConfetti);
+    }
+
+    function launchGoalConfetti() {
+      if (!confettiCtx) return;
+      if (!confettiWidth || !confettiHeight) {
+        resizeConfettiCanvas();
+      }
+
+      addConfettiWave(260, -confettiHeight * 0.35, -6);
+      scheduleGoalFx(() => addConfettiWave(190, -confettiHeight * 0.5, -10), 140);
+      scheduleGoalFx(() => addConfettiWave(170, -confettiHeight * 0.4, -8), 300);
+      startConfettiLoop();
+    }
+
+    function maybeAutoUpdateRecord() {
+      if (currentPasses > recordPasses) {
+        recordPasses = currentPasses;
+        saveStoredNumber(STORAGE_KEYS.record, recordPasses);
+        animateClass(recordValue, "record-value-burst", recordAnimations);
+        if (!newRecordAnnouncedThisRun) {
+          newRecordAnnouncedThisRun = true;
+          spawnPopup("New Record!", "record");
+          spawnSparkles({ count: 18, color: "#ffd15a", rangeX: 180, rangeY: 105 });
+        }
+        return true;
+      }
+      return false;
+    }
+
+    function celebrateGoalIfNeeded() {
+      if (currentPasses >= goalPasses && !goalCelebrated) {
+        goalCelebrated = true;
+        goalReachedHeadlineActive = true;
+        goalBarHoldFull = true;
+        animateClass(overlay, "goal-burst", overlayAnimations);
+        animateClass(goalValue, "goal-value-burst", goalValueAnimations);
+        spawnPopup("GOAL!", "goal");
+        spawnSparkles({ count: 30, color: "#82ffbf", rangeX: 240, rangeY: 150 });
+        scheduleGoalFx(() => {
+          spawnSparkles({ count: 20, color: "#d5ffe8", rangeX: 200, rangeY: 120 });
+        }, 170);
+        launchGoalConfetti();
+        goalPasses += 5;
+        render();
+      } else if (currentPasses < goalPasses) {
+        goalCelebrated = false;
+      }
+    }
+
+    function isKey(event, key, code) {
+      return event.key === key || event.code === code;
+    }
+
+    function isEditingNumber() {
+      const active = document.activeElement;
+      return active === recordValue || active === goalValue;
+    }
+
+    function selectAllText(el) {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    function wireEditableNumber(el, onCommit) {
+      el.addEventListener("focus", () => {
+        el.classList.add("editing");
+        setTimeout(() => selectAllText(el), 0);
+      });
+
+      el.addEventListener("blur", () => {
+        el.classList.remove("editing");
+        onCommit(el.textContent);
+      });
+
+      el.addEventListener("input", () => {
+        const cleaned = el.textContent.replace(/[^\d]/g, "");
+        if (cleaned !== el.textContent) {
+          el.textContent = cleaned;
+          selectAllText(el);
+        }
+      });
+
+      el.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          el.blur();
+        }
+
+        if (event.key === "Escape") {
+          event.preventDefault();
+          render();
+          el.blur();
+        }
+      });
+    }
+
+    wireEditableNumber(recordValue, (textValue) => {
+      recordPasses = sanitizeInputToNumber(textValue, recordPasses, 0);
+      if (recordPasses < currentPasses) {
+        recordPasses = currentPasses;
+      }
+      saveStoredNumber(STORAGE_KEYS.record, recordPasses);
+      clearPlusHistory();
+      render();
+    });
+
+    wireEditableNumber(goalValue, (textValue) => {
+      goalPasses = sanitizeInputToNumber(textValue, goalPasses, 1);
+      goalCelebrated = false;
+      goalReachedHeadlineActive = false;
+      goalBarHoldFull = false;
+      clearPlusHistory();
+      render();
+      celebrateGoalIfNeeded();
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (isEditingNumber()) {
+        return;
+      }
+
+      if (isKey(event, "1", "Digit1")) {
+        pushPlusSnapshot();
+        clearResetTransition();
+        goalReachedHeadlineActive = false;
+        goalBarHoldFull = false;
+        currentPasses += 1;
+        animateClass(currentText, "flash-good", currentTextAnimations);
+        spawnPopup("+1", "plus");
+        maybeAutoUpdateRecord();
+        render();
+        animateClass(headline, "headline-hit", headlineAnimations);
+        celebrateGoalIfNeeded();
+      }
+
+      if (isKey(event, "2", "Digit2")) {
+        clearVisualEffects();
+        clearPlusHistory();
+        currentPasses = 0;
+        goalCelebrated = false;
+        goalReachedHeadlineActive = false;
+        goalBarHoldFull = false;
+        newRecordAnnouncedThisRun = false;
+        animateClass(overlay, "shake", overlayAnimations);
+        spawnPopup("Reset", "minus");
+        render();
+        runResetHeadlineTransition();
+      }
+
+      if (isKey(event, "3", "Digit3")) {
+        clearResetTransition();
+        undoLastPlusAction();
+      }
+    });
+
+    window.addEventListener("resize", resizeConfettiCanvas);
+    resizeConfettiCanvas();
+    render();
+  </script>
+</body>
+</html>
