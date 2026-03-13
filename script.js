@@ -1,6 +1,7 @@
     const STORAGE_KEYS = {
       record: "hackySackCounter.recordPasses"
     };
+    const sync = window.HackySackSync ? window.HackySackSync.create("counter") : null;
 
     let recordPasses = readStoredNumber(STORAGE_KEYS.record, 0);
     let currentPasses = 0;
@@ -23,7 +24,7 @@
     const eventLayer = document.getElementById("eventLayer");
     const sparkleLayer = document.getElementById("sparkleLayer");
     const confettiCanvas = document.getElementById("confettiCanvas");
-    const confettiCtx = confettiCanvas.getContext("2d");
+    const confettiCtx = confettiCanvas ? confettiCanvas.getContext("2d") : null;
     const currentTextAnimations = ["flash-good", "flash-bad"];
     const overlayAnimations = ["shake", "record-burst", "goal-burst"];
     const recordAnimations = ["record-value-burst"];
@@ -76,6 +77,21 @@
       "#83f28f"
     ];
 
+    function publishSharedState() {
+      if (!sync) return;
+      sync.publishState({
+        currentPasses,
+        recordPasses,
+        goalPasses,
+        goalCelebrated,
+        goalReachedHeadlineActive,
+        goalBarHoldFull,
+        resetEmoteActive,
+        resetEmoteText,
+        newRecordAnnouncedThisRun
+      });
+    }
+
     function render() {
       if (!idleWaveConfigured) {
         configureIdleTextWave();
@@ -91,6 +107,7 @@
         headline.textContent = getMoodText();
       }
       syncHeadlineState();
+      publishSharedState();
     }
 
     function buildWaveCharacters(node, startDelay, charStepMs) {
@@ -534,6 +551,12 @@
           newRecordAnnouncedThisRun = true;
           spawnPopup("New Record!", "record");
           spawnSparkles({ count: 18, color: "#ffd15a", rangeX: 180, rangeY: 105 });
+          if (sync) {
+            sync.publish("record", {
+              currentPasses,
+              recordPasses
+            });
+          }
         }
         return true;
       }
@@ -552,6 +575,12 @@
         scheduleGoalFx(() => {
           spawnSparkles({ count: 20, color: "#d5ffe8", rangeX: 200, rangeY: 120 });
         }, 170);
+        if (sync) {
+          sync.publish("goal", {
+            currentPasses,
+            goalPasses
+          });
+        }
         launchGoalConfetti();
         goalPasses += 5;
         render();
@@ -660,12 +689,24 @@
         animateClass(overlay, "shake", overlayAnimations);
         spawnPopup("Reset", "minus");
         render();
+        if (sync) {
+          sync.publish("reset", {
+            currentPasses,
+            goalPasses
+          });
+        }
         runResetHeadlineTransition();
       }
 
       if (isKey(event, "3", "Digit3")) {
         clearResetTransition();
         undoLastPlusAction();
+        if (sync) {
+          sync.publish("undo", {
+            currentPasses,
+            goalPasses
+          });
+        }
       }
     });
 
